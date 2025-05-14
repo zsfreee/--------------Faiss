@@ -87,7 +87,7 @@ st.markdown("""
         border-radius: 5px;
         padding: 10px;
         margin-top: 10px;
-        border-left: 3px solid #4CAF50;
+        /* border-left: 3px solid #4CAF50; */
     }
     div[data-testid="stMetricValue"] {
         font-size: 1.2rem;

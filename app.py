@@ -100,21 +100,6 @@ st.markdown("""
         color: #666;
         text-align: right;
     }
-    .base-knowledge {
-        border-left: 3px solid #4CAF50;
-        padding-left: 10px;
-        background-color: #f0f8f0;
-    }
-    .additional-knowledge {
-        border-left: 3px solid #FFA500;
-        padding-left: 10px;
-        background-color: #fff8f0;
-    }
-    .no-knowledge {
-        border-left: 3px solid #FF0000;
-        padding-left: 10px;
-        background-color: #fff0f0;
-    }
     .source-header {
         font-weight: bold;
         margin-top: 10px;
@@ -528,6 +513,16 @@ def answer_query(query):
         avg_relevance = sum(scores) / len(scores) if scores else 1.0
         rel_score = 1 / (1 + avg_relevance)  # 0..1, где 1 — идеально
         
+        # Проверка на невалидный ответ для релевантности
+        TRIGGER_PHRASES = [
+            "нет информации", "не найдено", "не могу ответить", "не удалось найти"
+        ]
+        if (
+            any(phrase in answer.lower() for phrase in TRIGGER_PHRASES)
+            or not has_relevant_docs
+        ):
+            rel_score = 0
+        
         # Обновление метрик
         st.session_state.search_analytics["queries"].append(query)
         st.session_state.search_analytics["query_count"] += 1
@@ -593,44 +588,6 @@ def answer_query(query):
             )
             
             answer = response.choices[0].message.content
-        
-        # Format answer based on knowledge mode and content
-        if has_relevant_docs:
-            # Если есть релевантные документы, разделяем на базовую и дополнительную информацию
-            base_pattern = (
-                r'(.*?)(?:Дополнительно|Однако|Впрочем|'
-                r'могу добавить|стоит отметить)'
-            )
-            match = re.search(base_pattern, answer, re.DOTALL)
-            
-            if match:
-                base_part = match.group(1).strip()
-                additional_part = answer[len(base_part):].strip()
-                
-                # Используем простой div без вложенности для base-knowledge
-                formatted_answer = f"<div class='base-knowledge'>{base_part}</div>"
-                # Добавляем дополнительную информацию только если она есть
-                if additional_part:
-                    formatted_answer += f"<div class='additional-knowledge'>{additional_part}</div>"
-                answer = formatted_answer
-            else:
-                # Простой div без лишних переносов и вложенности
-                answer = f"<div class='base-knowledge'>{answer}</div>"
-        else:
-            # Если нет релевантных документов
-            if st.session_state.knowledge_mode == "Строгий":
-                answer = f"<div class='no-knowledge'>{answer}</div>"
-            else:
-                answer = f"<div class='additional-knowledge'>{answer}</div>"
-        
-        # Обновление контекста и метрик
-        if not st.session_state.conversation_context:
-            st.session_state.conversation_context = answer
-        else:
-            st.session_state.conversation_context += (
-                f"\n\nПользователь спросил: {query}\n\n"
-                f"Ответ: {answer}"
-            )
         
         query_time = time.time() - start_time
         

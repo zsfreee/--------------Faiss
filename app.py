@@ -594,36 +594,38 @@ def answer_query(query):
             
             answer = response.choices[0].message.content
         
-        # Форматирование ответа
-        if st.session_state.knowledge_mode in ["Сбалансированный", "Гибкий"]:
-            if (
-                "На основе базы знаний" not in answer
-                and "Согласно базе" not in answer
-                and has_relevant_docs
-            ):
-                base_pattern = (
-                    r'(.*?)(?:Дополнительно|Однако|Впрочем|'
-                    r'могу добавить|стоит отметить)'
-                )
-                match = re.search(base_pattern, answer, re.DOTALL)
+        # Format answer based on knowledge mode and content
+        if has_relevant_docs:
+            # Если есть релевантные документы, разделяем на базовую и дополнительную информацию
+            base_pattern = (
+                r'(.*?)(?:Дополнительно|Однако|Впрочем|'
+                r'могу добавить|стоит отметить)'
+            )
+            match = re.search(base_pattern, answer, re.DOTALL)
+            
+            if match:
+                base_part = match.group(1).strip()
+                additional_part = answer[len(base_part):].strip()
                 
-                if match:
-                    base_part = match.group(1).strip()
-                    additional_part = answer[len(base_part):].strip()
-                    
-                    formatted_answer = (
-                        f"<div class='base-knowledge'>{base_part}</div>\n\n"
+                formatted_answer = (
+                    f"<div class='base-knowledge'>{base_part}</div>\n\n"
+                )
+                if additional_part:
+                    formatted_answer += (
+                        f"<div class='additional-knowledge'>"
+                        f"{additional_part}</div>"
                     )
-                    if additional_part:
-                        formatted_answer += (
-                            f"<div class='additional-knowledge'>"
-                            f"{additional_part}</div>"
-                        )
-                    
-                    answer = formatted_answer
-        
-        if not has_relevant_docs and st.session_state.knowledge_mode == "Строгий":
-            answer = f"<div class='no-knowledge'>{answer}</div>"
+                
+                answer = formatted_answer
+            else:
+                # Если нет явного разделения, но есть релевантные документы
+                answer = f"<div class='base-knowledge'>{answer}</div>"
+        else:
+            # Если нет релевантных документов
+            if st.session_state.knowledge_mode == "Строгий":
+                answer = f"<div class='no-knowledge'>{answer}</div>"
+            else:
+                answer = f"<div class='additional-knowledge'>{answer}</div>"
         
         # Обновление контекста и метрик
         if not st.session_state.conversation_context:
@@ -842,5 +844,5 @@ if prompt := st.chat_input("Введите ваш запрос..."):
     st.session_state.messages.append({
         "role": "assistant",
         "content": answer,
-        "sources": metadata.get("docs_data", [])  # Теперь это JSON-сериализуемые словари
+        "sources": metadata.get("docs_data", [])  # JSON-сериализуемые словари
     })

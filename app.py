@@ -542,7 +542,7 @@ def answer_query(query):
         
         # Формирование контекста
         context = "\n\n".join([doc.page_content for doc in docs])
-        max_context_tokens = 4000 if "gpt-4" in st.session_state.model else 3000
+        max_context_tokens = 100000  # GPT-4 Turbo context limit (128K, leaving buffer for system message and formatting)
         
         if st.session_state.conversation_context:
             enhanced_context = (

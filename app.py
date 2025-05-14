@@ -513,6 +513,43 @@ def answer_query(query):
         avg_relevance = sum(scores) / len(scores) if scores else 1.0
         rel_score = 1 / (1 + avg_relevance)  # 0..1, где 1 — идеально
         
+        # Получение системного сообщения
+        system_message = get_system_message(
+            st.session_state.knowledge_mode,
+            has_relevant_docs,
+            bool(st.session_state.conversation_context)
+        )
+        
+        # Генерация ответа
+        with st.spinner("🧠 Генерация ответа..."):
+            messages = [
+                {"role": "system", "content": system_message},
+                *st.session_state.messages,
+                {
+                    "role": "user",
+                    "content": (
+                        f"Контекст для ответа:\n\n{st.session_state.conversation_context}\n\n"
+                        f"Вопрос пользователя: {query}"
+                    )
+                }
+            ]
+            
+            response = client.chat.completions.create(
+                model=st.session_state.model,
+                messages=messages,
+                temperature=st.session_state.temperature,
+                max_tokens=st.session_state.max_token,
+            )
+            
+            answer = response.choices[0].message.content
+        
+        query_time = time.time() - start_time
+        
+        logger.info(
+            f"Запрос обработан за {query_time:.2f}с, "
+            f"Релевантность: {rel_score:.4f}"
+        )
+        
         # Проверка на невалидный ответ для релевантности
         TRIGGER_PHRASES = [
             "нет информации", "не найдено", "не могу ответить", "не удалось найти"
@@ -558,43 +595,6 @@ def answer_query(query):
                 if st.session_state.conversation_context
                 else context
             )
-        
-        # Получение системного сообщения
-        system_message = get_system_message(
-            st.session_state.knowledge_mode,
-            has_relevant_docs,
-            bool(st.session_state.conversation_context)
-        )
-        
-        # Генерация ответа
-        with st.spinner("🧠 Генерация ответа..."):
-            messages = [
-                {"role": "system", "content": system_message},
-                *st.session_state.messages,
-                {
-                    "role": "user",
-                    "content": (
-                        f"Контекст для ответа:\n\n{enhanced_context}\n\n"
-                        f"Вопрос пользователя: {query}"
-                    )
-                }
-            ]
-            
-            response = client.chat.completions.create(
-                model=st.session_state.model,
-                messages=messages,
-                temperature=st.session_state.temperature,
-                max_tokens=st.session_state.max_token,
-            )
-            
-            answer = response.choices[0].message.content
-        
-        query_time = time.time() - start_time
-        
-        logger.info(
-            f"Запрос обработан за {query_time:.2f}с, "
-            f"Релевантность: {rel_score:.4f}"
-        )
         
         # Сериализуемые данные для источников
         docs_data = [

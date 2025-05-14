@@ -607,18 +607,14 @@ def answer_query(query):
                 base_part = match.group(1).strip()
                 additional_part = answer[len(base_part):].strip()
                 
-                formatted_answer = (
-                    f"<div class='base-knowledge'>{base_part}</div>\n\n"
-                )
+                # Используем простой div без вложенности для base-knowledge
+                formatted_answer = f"<div class='base-knowledge'>{base_part}</div>"
+                # Добавляем дополнительную информацию только если она есть
                 if additional_part:
-                    formatted_answer += (
-                        f"<div class='additional-knowledge'>"
-                        f"{additional_part}</div>"
-                    )
-                
+                    formatted_answer += f"<div class='additional-knowledge'>{additional_part}</div>"
                 answer = formatted_answer
             else:
-                # Если нет явного разделения, но есть релевантные документы
+                # Простой div без лишних переносов и вложенности
                 answer = f"<div class='base-knowledge'>{answer}</div>"
         else:
             # Если нет релевантных документов

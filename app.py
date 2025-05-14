@@ -1,16 +1,5 @@
 import streamlit as st
 import hmac
-st.set_page_config(
-    page_title="AI-Консультант",
-    page_icon="💡",
-    layout="wide",
-    initial_sidebar_state="expanded"
-)
-from streamlit_extras.badges import badge
-from streamlit_extras.metric_cards import style_metric_cards
-from langchain_community.vectorstores import FAISS
-from langchain_openai import OpenAIEmbeddings
-from openai import OpenAI
 import os
 import tempfile
 import gdown
@@ -26,6 +15,19 @@ import matplotlib.pyplot as plt
 import numpy as np
 from numpy import dot
 from numpy.linalg import norm
+from streamlit_extras.badges import badge
+from streamlit_extras.metric_cards import style_metric_cards
+from langchain_community.vectorstores import FAISS
+from langchain_openai import OpenAIEmbeddings
+from openai import OpenAI
+
+# Настройка страницы Streamlit
+st.set_page_config(
+    page_title="AI-Консультант",
+    page_icon="💡",
+    layout="wide",
+    initial_sidebar_state="expanded"
+)
 
 # --- Аутентификация по паролю через Streamlit secrets ---
 def check_password():
@@ -35,14 +37,17 @@ def check_password():
     
     def password_entered():
         """Checks whether a password entered by the user is correct."""
-        if hmac.compare_digest(st.session_state.password, st.secrets.get("PASSWORD", "default_password")):
+        if hmac.compare_digest(
+            st.session_state.password,
+            st.secrets.get("PASSWORD", "default_password")
+        ):
             st.session_state.password_correct = True
             del st.session_state.password  # Не храним пароль в сессии
         else:
             st.session_state.password_correct = False
     
     st.text_input(
-        "Введите пароль для доступа к приложению", 
+        "Введите пароль для доступа к приложению",
         type="password",
         key="password",
         on_change=password_entered
@@ -200,7 +205,17 @@ if not api_key:
 client = OpenAI(api_key=api_key)
 
 def validate_google_drive_url(url):
-    """Функция для валидации ссылки Google Drive."""
+    """Validate Google Drive URL.
+    
+    Args:
+        url (str): Google Drive URL to validate
+        
+    Returns:
+        tuple: (is_valid, id_value, url_type)
+            - is_valid (bool): Whether the URL is valid
+            - id_value (str): File or folder ID
+            - url_type (str): Type of URL ('file' or 'folder')
+    """
     if 'file' in url:
         patterns = [
             r'drive\.google\.com/file/d/([^/]+)',
@@ -218,7 +233,15 @@ def validate_google_drive_url(url):
     return False, None, None
 
 def download_file_from_drive(file_id, output_path):
-    """Загрузка файла из Google Drive."""
+    """Download file from Google Drive.
+    
+    Args:
+        file_id (str): Google Drive file ID
+        output_path (str): Path to save the downloaded file
+        
+    Returns:
+        str: Path to downloaded file or None if download failed
+    """
     try:
         with st.spinner("Загрузка файла из Google Drive..."):
             direct_url = f"https://drive.google.com/uc?id={file_id}&export=download"
@@ -230,7 +253,15 @@ def download_file_from_drive(file_id, output_path):
         return None
 
 def download_from_drive_folder(folder_id, output_dir):
-    """Загрузка файлов из папки Google Drive."""
+    """Download files from Google Drive folder.
+    
+    Args:
+        folder_id (str): Google Drive folder ID
+        output_dir (str): Directory to save downloaded files
+        
+    Returns:
+        list: List of downloaded file paths or empty list if download failed
+    """
     try:
         with st.spinner("Загрузка файлов из папки Google Drive..."):
             folder_url = f"https://drive.google.com/drive/folders/{folder_id}"
@@ -247,12 +278,30 @@ def download_from_drive_folder(folder_id, output_dir):
         return []
 
 def load_faiss_db(faiss_path, embeddings=None):
-    """Загрузка FAISS базы данных."""
+    """Load FAISS database.
+    
+    Args:
+        faiss_path (str): Path to FAISS index directory
+        embeddings (OpenAIEmbeddings, optional): Embeddings model
+        
+    Returns:
+        tuple: (db, doc_count)
+            - db (FAISS): Loaded FAISS database
+            - doc_count (int): Number of documents in database
+    """
     try:
         if embeddings is None:
             embeddings = OpenAIEmbeddings()
-        db = FAISS.load_local(faiss_path, embeddings, allow_dangerous_deserialization=True)
-        doc_count = len(db.index_to_docstore_id) if hasattr(db, 'index_to_docstore_id') else "неизвестно"
+        db = FAISS.load_local(
+            faiss_path,
+            embeddings,
+            allow_dangerous_deserialization=True
+        )
+        doc_count = (
+            len(db.index_to_docstore_id)
+            if hasattr(db, 'index_to_docstore_id')
+            else "неизвестно"
+        )
         st.session_state.faiss_db = db
         st.session_state.faiss_path = faiss_path
         st.session_state.doc_count = doc_count
@@ -264,7 +313,16 @@ def load_faiss_db(faiss_path, embeddings=None):
         return None, 0
 
 def get_system_message(knowledge_mode, has_relevant_docs, conversation_context_exists):
-    """Получение системного сообщения в зависимости от режима работы."""
+    """Generate system message based on knowledge mode and context.
+    
+    Args:
+        knowledge_mode (str): Current knowledge mode
+        has_relevant_docs (bool): Whether relevant documents were found
+        conversation_context_exists (bool): Whether conversation context exists
+        
+    Returns:
+        str: System message for the AI model
+    """
     base_message = "Ты — AI-ассистент, помогающий пользователям с вопросами на основе базы знаний. "
     
     mode_instructions = {
@@ -314,13 +372,33 @@ def get_system_message(knowledge_mode, has_relevant_docs, conversation_context_e
         5. Твоя цель — максимально полезный и точный ответ в рамках выбранного режима работы.
     """
     
-    return f"{base_message}\n\n{mode_instructions[knowledge_mode]}\n\n{search_status}\n\n{dialog_status}\n\n{final_instructions}"
+    return (
+        f"{base_message}\n\n"
+        f"{mode_instructions[knowledge_mode]}\n\n"
+        f"{search_status}\n\n"
+        f"{dialog_status}\n\n"
+        f"{final_instructions}"
+    )
 
 @lru_cache(maxsize=50)
 def cached_search(query_hash, k, knowledge_mode):
-    """Кэшированный поиск в базе знаний."""
+    """Perform cached search in knowledge base.
+    
+    Args:
+        query_hash (str): Hashed query string
+        k (int): Number of results to return
+        knowledge_mode (str): Current knowledge mode
+        
+    Returns:
+        tuple: (results, has_relevant)
+            - results (list): List of (doc, score) tuples
+            - has_relevant (bool): Whether relevant documents were found
+    """
     try:
-        results = st.session_state.faiss_db.similarity_search_with_score(query_hash, k=k)
+        results = st.session_state.faiss_db.similarity_search_with_score(
+            query_hash,
+            k=k
+        )
         
         thresholds = {
             "Строгий": 0.8,
@@ -329,37 +407,72 @@ def cached_search(query_hash, k, knowledge_mode):
         }
         threshold = thresholds.get(knowledge_mode, 0.5)
         
-        filtered_results = [(doc, score) for doc, score in results if score < threshold]
+        filtered_results = [
+            (doc, score)
+            for doc, score in results
+            if score < threshold
+        ]
         return filtered_results, len(filtered_results) > 0
     except Exception as e:
         logger.error(f"Ошибка при выполнении кэшированного поиска: {e}")
         return [], False
 
 def estimate_tokens(text):
-    """Оценка количества токенов в тексте."""
+    """Estimate number of tokens in text.
+    
+    Args:
+        text (str): Input text
+        
+    Returns:
+        float: Estimated number of tokens
+    """
     return len(text.split()) * 1.5
 
 def update_conversation_context():
-    """Обновление контекста разговора."""
-    relevant_messages = st.session_state.messages[-st.session_state.max_context_turns*2:] if len(st.session_state.messages) > st.session_state.max_context_turns*2 else st.session_state.messages
+    """Update conversation context from recent messages."""
+    relevant_messages = (
+        st.session_state.messages[-st.session_state.max_context_turns*2:]
+        if len(st.session_state.messages) > st.session_state.max_context_turns*2
+        else st.session_state.messages
+    )
     
     context_parts = []
     for i in range(0, len(relevant_messages), 2):
         if i+1 < len(relevant_messages):
             user_msg = relevant_messages[i]["content"]
             assistant_msg = relevant_messages[i+1]["content"]
-            context_parts.append(f"Пользователь: {user_msg}\nАссистент: {assistant_msg}")
+            context_parts.append(
+                f"Пользователь: {user_msg}\nАссистент: {assistant_msg}"
+            )
     
     st.session_state.conversation_context = "\n\n".join(context_parts)
-    logger.info(f"Обновлен контекст разговора. Размер: {len(st.session_state.conversation_context)} символов")
+    logger.info(
+        f"Обновлен контекст разговора. "
+        f"Размер: {len(st.session_state.conversation_context)} символов"
+    )
 
 def answer_query(query):
-    """Обработка запроса пользователя."""
+    """Process user query and generate response.
+    
+    Args:
+        query (str): User's query
+        
+    Returns:
+        tuple: (answer, metadata)
+            - answer (str): Generated answer
+            - metadata (dict): Query metadata including relevance and sources
+    """
     start_time = time.time()
     
     try:
         # Проверка на запросы о возможностях
-        general_questions = ["что ты умеешь", "помощь", "справка", "возможности", "команды"]
+        general_questions = [
+            "что ты умеешь",
+            "помощь",
+            "справка",
+            "возможности",
+            "команды"
+        ]
         if any(q in query.lower() for q in general_questions):
             capabilities = f"""
             # Возможности AI-консультанта
@@ -377,18 +490,37 @@ def answer_query(query):
             
             Задайте мне вопрос, и я постараюсь на него ответить!
             """
-            logger.info(f"Запрос о возможностях. Время: {time.time() - start_time:.2f}с")
-            return capabilities, {"relevance": 1.0, "docs_count": 0, "query_time": time.time() - start_time}
+            logger.info(
+                f"Запрос о возможностях. "
+                f"Время: {time.time() - start_time:.2f}с"
+            )
+            return capabilities, {
+                "relevance": 1.0,
+                "docs_count": 0,
+                "query_time": time.time() - start_time
+            }
         
         # Проверка наличия базы данных
         if not st.session_state.faiss_db:
             logger.warning("Попытка запроса без загруженной базы данных")
-            return "❌ База данных не загружена. Пожалуйста, загрузите FAISS базу в боковом меню.", {"relevance": 0, "docs_count": 0, "query_time": time.time() - start_time}
+            return (
+                "❌ База данных не загружена. "
+                "Пожалуйста, загрузите FAISS базу в боковом меню.",
+                {
+                    "relevance": 0,
+                    "docs_count": 0,
+                    "query_time": time.time() - start_time
+                }
+            )
         
         # Поиск в базе знаний
         logger.info(f"Поиск для запроса: '{query}'")
         with st.spinner("🔍 Поиск релевантной информации..."):
-            docs_with_scores, has_relevant_docs = cached_search(query, st.session_state.use_chunk, st.session_state.knowledge_mode)
+            docs_with_scores, has_relevant_docs = cached_search(
+                query,
+                st.session_state.use_chunk,
+                st.session_state.knowledge_mode
+            )
         
         # Обработка результатов поиска
         docs = [doc for doc, _ in docs_with_scores]
@@ -401,7 +533,7 @@ def answer_query(query):
         st.session_state.search_analytics["query_count"] += 1
         st.session_state.search_analytics["total_docs_found"] += len(docs)
         st.session_state.search_analytics["avg_docs_found"] = (
-            st.session_state.search_analytics["total_docs_found"] / 
+            st.session_state.search_analytics["total_docs_found"] /
             st.session_state.search_analytics["query_count"]
         )
         
@@ -413,15 +545,24 @@ def answer_query(query):
         max_context_tokens = 4000 if "gpt-4" in st.session_state.model else 3000
         
         if st.session_state.conversation_context:
-            enhanced_context = st.session_state.conversation_context + "\n\n" + context
+            enhanced_context = (
+                f"{st.session_state.conversation_context}\n\n{context}"
+            )
         else:
             enhanced_context = context
         
         # Ограничение размера контекста
-        while estimate_tokens(enhanced_context) > max_context_tokens and len(docs) > 1:
+        while (
+            estimate_tokens(enhanced_context) > max_context_tokens
+            and len(docs) > 1
+        ):
             docs = docs[:-1]
             context = "\n\n".join([doc.page_content for doc in docs])
-            enhanced_context = st.session_state.conversation_context + "\n\n" + context if st.session_state.conversation_context else context
+            enhanced_context = (
+                f"{st.session_state.conversation_context}\n\n{context}"
+                if st.session_state.conversation_context
+                else context
+            )
         
         # Получение системного сообщения
         system_message = get_system_message(
@@ -435,7 +576,13 @@ def answer_query(query):
             messages = [
                 {"role": "system", "content": system_message},
                 *st.session_state.messages,
-                {"role": "user", "content": f"Контекст для ответа:\n\n{enhanced_context}\n\nВопрос пользователя: {query}"}
+                {
+                    "role": "user",
+                    "content": (
+                        f"Контекст для ответа:\n\n{enhanced_context}\n\n"
+                        f"Вопрос пользователя: {query}"
+                    )
+                }
             ]
             
             response = client.chat.completions.create(
@@ -449,17 +596,29 @@ def answer_query(query):
         
         # Форматирование ответа
         if st.session_state.knowledge_mode in ["Сбалансированный", "Гибкий"]:
-            if "На основе базы знаний" not in answer and "Согласно базе" not in answer and has_relevant_docs:
-                base_pattern = r'(.*?)(?:Дополнительно|Однако|Впрочем| могу добавить| стоит отметить)'
+            if (
+                "На основе базы знаний" not in answer
+                and "Согласно базе" not in answer
+                and has_relevant_docs
+            ):
+                base_pattern = (
+                    r'(.*?)(?:Дополнительно|Однако|Впрочем|'
+                    r'могу добавить|стоит отметить)'
+                )
                 match = re.search(base_pattern, answer, re.DOTALL)
                 
                 if match:
                     base_part = match.group(1).strip()
                     additional_part = answer[len(base_part):].strip()
                     
-                    formatted_answer = f"<div class='base-knowledge'>{base_part}</div>\n\n"
+                    formatted_answer = (
+                        f"<div class='base-knowledge'>{base_part}</div>\n\n"
+                    )
                     if additional_part:
-                        formatted_answer += f"<div class='additional-knowledge'>{additional_part}</div>"
+                        formatted_answer += (
+                            f"<div class='additional-knowledge'>"
+                            f"{additional_part}</div>"
+                        )
                     
                     answer = formatted_answer
         
@@ -470,11 +629,17 @@ def answer_query(query):
         if not st.session_state.conversation_context:
             st.session_state.conversation_context = answer
         else:
-            st.session_state.conversation_context += f"\n\nПользователь спросил: {query}\n\nОтвет: {answer}"
+            st.session_state.conversation_context += (
+                f"\n\nПользователь спросил: {query}\n\n"
+                f"Ответ: {answer}"
+            )
         
         query_time = time.time() - start_time
         
-        logger.info(f"Запрос обработан за {query_time:.2f}с, Релевантность: {rel_score:.4f}")
+        logger.info(
+            f"Запрос обработан за {query_time:.2f}с, "
+            f"Релевантность: {rel_score:.4f}"
+        )
         
         # Сериализуемые данные для источников
         docs_data = [
@@ -488,7 +653,7 @@ def answer_query(query):
         return answer, {
             "relevance": rel_score,
             "docs_count": len(docs),
-            "docs_data": docs_data,  # Используем сериализуемую версию
+            "docs_data": docs_data,
             "query_time": query_time,
             "timestamp": datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
             "mode": st.session_state.knowledge_mode
@@ -497,7 +662,11 @@ def answer_query(query):
     except Exception as e:
         error_message = f"❌ Ошибка при обработке запроса: {str(e)}"
         logger.error(error_message)
-        return error_message, {"relevance": 0, "docs_count": 0, "query_time": time.time() - start_time}
+        return error_message, {
+            "relevance": 0,
+            "docs_count": 0,
+            "query_time": time.time() - start_time
+        }
 
 # --- SIDEBAR: Загрузка базы и настройки ---
 with st.sidebar:
